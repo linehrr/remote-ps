@@ -1,0 +1,9 @@
+Package: remote-ps
+Version: 1.0.0
+Architecture: all
+Maintainer: Ryne Yang (linehrr@gmail.com)
+Installed-Size: 4.0k
+Depends: sshpass, libnet-ping-external-perl, libcurses-ui-perl, libcurses-perl, perl
+Section: free
+Priority: optional
+Description: Remote process manager with Terminal-GUI

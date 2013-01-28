@@ -1,0 +1,147 @@
+#!/usr/bin/perl -w 
+use strict;
+use Curses::UI;
+use Scalar::Util qw/looks_like_number/;
+use Net::Ping;
+
+my $gui;
+my $cmd = get_cmd($ARGV[0]);
+my $pid_hash;
+my $listbox;
+my $win;
+
+$win = $gui->add('win', 'Window');
+$listbox = $win->add('listbox', 'Listbox', -multi => 1);
+set_list();
+$gui->set_binding(sub{ exit(0) }, "q");
+$gui->set_binding(\&kill_pid, "k");
+$gui->set_binding(\&set_list, "x");
+$gui->set_binding(\&show_help, "h");
+$gui->mainloop;
+
+
+#---------------------------------------------------------------------------
+#  sub routines
+#---------------------------------------------------------------------------
+sub kill_pid {
+	my @chosen = $listbox->get();
+	if(not @chosen){
+		set_list('No process chosen...',1);
+		return;
+	}
+	my $msg;
+	foreach (@chosen){
+		$msg .= substr($pid_hash->{$_}, 0, 45);
+		$msg .= "\n";
+	}
+	my $result = $gui->dialog(
+			-message	=>	"$msg",
+			-title		=>	"Sure to kill them?",
+			-buttons	=>	['yes', 'no'],
+			);
+	if($result){
+		my $notice;
+		foreach (@chosen){
+			my $cmd_reply = `$cmd kill $_ 2>&1`;
+			$notice .= $cmd_reply ? "failed $_: $cmd_reply\n" : "Killed: $_\n";
+		}
+		set_list($notice, 1);
+	}else{
+		set_list();
+	}
+}
+
+sub get_ps {
+	my @reply = `$cmd ps ax`;
+
+	foreach (@reply){
+		my $pid = substr($_, 0, 5);
+		if(looks_like_number($pid)){
+			$pid_hash->{$pid} = $_;
+		}
+	}
+	return sort keys %$pid_hash;
+}
+
+sub set_list {
+	my $banner = shift;
+	my $notice = shift;
+	if (defined $banner && looks_like_number($notice) && $notice == 1){
+		$gui->status($banner);
+		sleep 2;
+		$gui->nostatus;
+	}
+	$gui->status("Refreshing list...");
+	sleep 1;
+	my @array = get_ps();
+	$gui->nostatus;
+	$listbox->labels($pid_hash);
+	$listbox->values(\@array);
+	$listbox->focus;
+}
+
+sub show_help {
+	$gui->dialog(
+			-message 	=> "k\tKill selected processes\nx\tRefresh list\nq\tQuit\nh\tShow this help\n",
+			-title		=> "HELP",
+			-buttons	=> ['yes'],
+			);
+}
+
+sub get_cmd {
+	my $params = shift;
+	if(defined $params && $params eq '-h'){
+		print "This is a program to manage processes locally or remotely\n";
+		print "remote-ps\tto manage local processes\n";
+		print "remote-ps\tuser\@XXX.XXX.XXX.XXX:password\tto manage remote processes\n";
+		print "remote-ps -h\tshow this help message\n";
+		print "----------------------------------------\n";
+		print "\x1b[31mPress h to see help\n";
+		print "Press x to refresh list(list DO NOT auto-refresh)\n";
+		print "Press k to kill selected processes\n";
+		print "Press q to quit\x1b[0m\n";
+		exit(0);
+	}
+	$gui = new Curses::UI(-color_support => 1);
+
+	if(not defined $params or $params eq ''){
+		return '';
+	}else{
+		(my $user, my $addr, my $pw) = split /[\@:]/,$params;
+		if(not defined $pw or $pw eq ''){
+			$gui->dialog(
+					-message	=>	'You did not provide a password',
+					-title		=>	'Are you sure?',
+					-buttons	=>	['yes'],
+					);
+			$pw = '';
+		}
+		if(not `which sshpass`){
+			print "sshpass not installed, please install it using 'sudo apt-get install sshpass'\n";
+			exit(0);
+		}
+		$gui->progress(
+				-max	=>	3,
+				-message	=>	'Checking the network...',
+				);
+		my $ping_result = 0;
+		for (1 .. 3){
+			my $ping = Net::Ping->new();
+			$ping_result = 1 if ($ping->ping($addr));
+			$gui->setprogress($_);
+			sleep 1;
+		}
+		$gui->noprogress;
+		if($ping_result == 1){
+			return "sshpass -p $pw ssh $user\@$addr";
+		}else{
+			$gui->dialog(
+					-message	=>	'Cannot connect to the remote host',
+					-title		=>	'Network fail',
+					-buttons	=>	['yes'],
+					);
+			exit(0);
+		}
+	}
+
+}
