@@ -1,0 +1,9 @@
+This is a remote process controller and monitoring tool 
+
+Setup:
+	You can use 'dpkg -b remote-ps/' to pack up the whole dir and build your own .deb package
+	You can also manually put the remote-ps this file into your PATH, but remember to do 'chmod +x remote-ps' before you can use it.
+
+Author:
+	Ryne Yang <linehrr@gmail.com>
+
